@@ -1,5 +1,5 @@
 (function() {
-  var jsa = this.jsa = this.jsa || { // 命名空间jsa
+	var jsa = this.jsa = this.jsa || { // 命名空间jsa
 		extend: function(source, target, override) { // 扩展函数
 			for (var prop in source) {
 				if (override || !(prop in target))
@@ -27,7 +27,7 @@
 		var maxAvailable = 10, // 最大的有效任务数
 				idPool = null, // 任务ID分配池
 				idleTasks = new Array(maxAvailable), // 待执行的任务
-				completedTasks = new Array(); // 已回收的任务列表
+				completedTasks = []; // 已回收的任务列表
 		
 		//------------------------------------------------------------
 		// 私有方法
@@ -57,14 +57,14 @@
 				completedTasks.push(task);
 			}
 		};
-		
+
 		//------------------------------------------------------------
 		// 公有属性与方法
 		//------------------------------------------------------------
 		return {
 			// 属性
 			status: "idle", // 任务管理器状态
-			firing: null, // 当前正在执行的任务
+			context: null, // 当前正在执行的任务
 			// 方法
 			getTask: function(id) { // 获取任务/新任务
 				if (typeof id !== "number") {
@@ -79,40 +79,39 @@
 				var type = event.type,
 						id = event.id,
 						self = this,
-						context = self.firing,
+						context = self.context,
 						target = idleTasks[id];
 				switch(type) {
 					case "wait": // 若当前任务请求挂起，则设置当前正在执行的任务为空
-						if (self.firing === target)
-							self.firing = null;
+						if (context === target)
+							self.context = target.observer;
 						break;
 					case "fire": // 若有任务请求执行
-						if (context) { // 已有任务正在执行
-							if (context !== target) { // 请求执行的任务（target）处于另一个任务（context）中
-								// 将请求执行的任务合并到其上下文中（将target的待处理列表插入到context的前面）
-								context.waitingList = A_concat(target.waitingList, context.waitingList);
-								target.complete(); // 执行target的完成函数
-								// 检查target请求执行时是否带参数，若有则将其存入context的参数缓存中待取出
-								context.argsCache = (event.args && event.args.length) ? event.args : null;
+						if (context && context.firing && context !== target) { // 已有任务正在执行，且target处于另一个任务（context）中
+							// 构建两者关系
+							if (context.observableList.indexOf(target.id) < 0) {
+								context.observableList.push(target.id);
+								target.observer = context;
 							}
-						} else { // 不存在上下文
-							this.firing = target;
-							self.status = "busy";
+							// 挂起context
+							context.hang();
 						}
+						self.context = target;
+						self.status = "busy";
 						break;
-					case "pause":
+					case "hang":
 					case "abort":
 						// 1. 若context为空，则没有任务在执行（或者正在挂起）
 						// 2. 当前任务请求暂停
 						// 这两种情况都能重置任务管理器的状态
 						if (!context || target === context) {
-							self.firing = null;
+							self.context = target && target.observer;
 							self.status = "idle";
 						}
 						break;
 					case "complete": // 有任务完成，执行清理
 						if (!context || context === target) {
-							self.firing = null;
+							self.context = target && target.observer;
 							self.status = "idle";
 						}
 						removeTask(id);
@@ -131,7 +130,7 @@
 	};
 	
 	jsa.extend({ // 扩展Task方法
-		status: ["idle", "pause", "hanging", "firing", "success", "failure"], // 任务状态列表
+		status: ["idle", "hanging", "firing", "success", "failure"], // 任务状态列表
 		basic: { // 默认任务处理对象
 			normal: function(args) { // 正常状态下的默认处理方法
 				return args;
@@ -148,13 +147,15 @@
 			this.timeoutId = null,
 			// 分支主要用于确认是否属于初始化行为
 			this.id = (typeof id === "number") ? id : this.id;
-			this.status = "idle";    // 任务默认状况下为idle
-			this.waitingList = [];   // 待执行的动作列表
-			this.completedList = []; // 已完成的动作列表
-			this.returnValue = null; // 保存返回结果
-			this.argsCache = null;   // 嵌入的异步缓存参数列表
-			this.lastArgs = null;    // 保存上次的参数
-			this.firing = null;      // 当前正在执行的对象
+			this.status = "idle";     // 任务默认状况下为idle
+			this.waitingList = [];    // 待执行的动作列表
+			this.completedList = [];  // 已完成的动作列表
+			this.returnValue = null;  // 保存返回结果
+			this.argsCache = [];      // 存储子任务的返回结果
+			this.lastArgs = null;     // 保存上次的参数
+			this.firing = null;       // 当前正在执行的对象，同时用于表明任务是否处于执行阶段（为null则为切换阶段）
+			this.observer = null;     // 观察者
+			this.observableList = [];  // 正在观察的任务
 			return this;
 		},
 		reset: function() { // 重置函数
@@ -165,7 +166,6 @@
 			if (this.completed())
 				throw "InvalidOperation: Cannot add any operations to completed task.";
 			var obj = jsa.clone(Task.basic); // 生成任务处理对象
-			obj.parrelList = [];
 			if (typeof fn === "function") // 绑定动作
 				obj[stat] = fn;
 			this.waitingList.push(obj);
@@ -184,20 +184,12 @@
 			self.waitingList.push(~~timeout);
 			return self;
 		},
-		pause: function() {
-			if (this.status !== "firing") return this;
-			if (this.timeoutId !== null) // 暂停任务
-				clearTimeout(this.timeoutId);
-			taskManager.update({ // 通知任务管理器此任务已暂停
+		hang: function() {
+			taskManager.update({ // 通知任务管理器此任务已挂起（不包含子任务）
 				id: this.id,
-				type: "pause"
+				type: "hang"
 			});
-			this.status = "pause";
-			if (this.firing) { // 若任务已开始执行，则将正在执行的对象返回到待执行列表中
-				this.waitingList.unshift(this.firing);
-				this.completedList.pop();
-			}
-			this.firing = null;
+			this.status = "hanging";
 			return this;
 		},
 		abort: function() {
@@ -209,27 +201,94 @@
 				type: "abort"
 			});
 			var wList = this.waitingList; // 保存尚未完成的列表返回
-			this.complete(); // 强制完成任务
+			this.complete("except", ["Abort: abort by task " + this.id]); // 强制完成任务
 			return wList;
 		},
 		complete: function(type, args) {
 			if (this.completed()) return null;
 			// 设置完成状态下的数据状态
-			this.status = "completed";
-			this.waitingList = [];
-			this.firing = null;
+			var self = this;
+			self.waitingList = [];
+			self.firing = null;
+			if (type === "normal") self.status = "success";
+			else {
+				// 强制中断所有子任务
+				self.update({
+					id: self.id,
+					type: type
+				});
+				self.status = "failure";
+				self.returnValue = args;
+			}
 			taskManager.update({ // 通知任务管理器此任务已完成
-				id: this.id,
+				id: self.id,
 				type: "complete"
 			});
-			// 根据最后的结果来执行一些返回操作
-			if (type) return Task.basic[type](args);
-			return null;
+			// 存在观察者在观察此任务
+			if (self.observer) {
+				// 获取执行结果
+				var result = self.returnValue;
+				// 通知观察者已此任务已执行完毕
+				self.observer.update({
+					id: self.id,
+					type: type,
+					args: args,
+					result: result
+				});
+			}
+			return self;
 		},
 		completed: function() {
-			return (this.status === "completed");
+			return (this.status === "success" || 
+							this.status === "failure");
+		},
+		update: function(event) {
+			var id = event.id,
+					type = event.type,
+					args = event.args,
+					result = event.result,
+					self = this,
+					list = self.observableList,
+					index = list.indexOf(id);
+			if (id !== self.id) {
+					self.argsCache.push(result);
+			}
+			switch (type) {
+				case "normal": // 子任务正常完成
+					if (!self.firing && list.length == self.argsCache.length) { // 当前行动中的所有子任务已完成（firing为空表明当前行动结束）
+						var argsCache = self.argsCache;
+						self.observableList = []; // 清空子任务列表
+						self.argsCache = []; // 清空子任务参数列表
+						self.fire.apply(self, argsCache); // 重新执行此任务
+					}
+					break;
+				case "except": // 子任务存在异常
+					// 终止所有子任务
+					for (var i = 0, len = list.length; i < len; ++i) {
+						var task = taskManager.getTask(list[i]);
+						if (task) { // 跳过已完成的任务
+							task.observer = null; // 防止重复终止子任务
+							task.abort();
+							task.observer = self; // 恢复子任务信息
+						}
+					}
+					self.observableList = [];
+					self.argsCache = [];
+					// 若两者相等，说明是任务自身调用来终止所有子任务
+					if (id !== self.id) {
+						// 继续执行任务（假设存在异常处理 ）
+						taskManager.update({
+							id: self.id,
+							type: "fire",
+						});
+						self.status = "firing";
+						self._fire("except", ["SubtaskException: subtask " + id + " has exception: " + args]);
+					}
+					break;
+			}
 		},
 		_fire: function(stat, args) {
+			if (this.status !== "firing") return this;
 			var self = this;
 			var type = "normal",
 			    obj = self.waitingList.shift(),
@@ -243,31 +302,37 @@
 						id: self.id,
 						type: "wait"
 					});
+					self.firing = null;
 					self.timeoutId = setTimeout(function() {
 						taskManager.update({ // 通知任务管理器拾起此任务
 							id: self.id,
 							type: "fire"
 						});
+						self.status = "firing";
 						self._fire(stat, args);
 					}, obj);
 				} else { // 处理一般的串行
 					try {
 						// 执行对象的行为
 						result = self.returnValue = obj[stat].apply(self, args);
-						lastArgs = args; // 执行对象的行为当中可能改变了lastArgs，因此需要修正
-						if (self.argsCache) { // 确认对象的行为中是否嵌有带参数的异步行为fire
-							args = self.argsCache; // 若存在内嵌的异步行为，则包含异步行为的函数无法执行
-							result = null;         // 异步对象后的行为，也不能return Task.fire()
-							self.argsCache = null;
-						}
 					} catch (e) {
 						type = "except";
 						result = e;
 					}
+					self.firing = null;
+					lastArgs = args; // 执行对象的行为当中可能改变了lastArgs，因此需要修正
 					if (result) args = [result]; // 若存在返回值，将result作为下一个对象的执行参数
-					self.timeoutId = setTimeout(function() {
-						self._fire(type, args);
-					}, 0);
+					if (self.argsCache.length !== self.observableList.length) {// 还有子任务未完成
+						self.hang();
+					} else if (self.argsCache.length > 0) { // 含子任务且已完成
+						self.timeoutId = setTimeout(function() {
+							self.update({id: self.id, type: type, args: args});
+						}, 0);
+					} else { // 不含子任务
+						//self.timeoutId = setTimeout(function() {
+							self._fire(type, args);
+						//}, 0);
+					}
 				}
 			} else {
 				return this.complete(stat, args);
