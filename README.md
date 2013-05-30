@@ -1,13 +1,17 @@
 jsa
 ===
-
-库   名：jsa（暂定）
 作   者：钟华锋（TerenceZ）
+
 邮   箱：texvnars@gmail.com
+
 GitHub: https://github.com/TerenceZ/jsa.git
+
 用   途：用于javascript的异步编程，此库除了基本的异步编程功能外，还支持并行操
          作（伪）、嵌套式异步编程（大雾）等。
-用   法：1、通过var task = [new] jsa.Task()创建任务；
+         
+用   法：
+
+         1、通过var task = [new] jsa.Task()创建任务；
          2、通过task.then(function(...) {...})添加normal行为；
          3、通过task.once(function(e) {...})添加异常处理（except）行为；
          4、通过task.loop(..., ..., ..., ...)添加异步循环行为；
@@ -16,7 +20,10 @@ GitHub: https://github.com/TerenceZ/jsa.git
          7、通过task.returnValue可以查看任务的最近的行为返回值；
          8、通过task.reset()可以重置任务；
          9、通过task.abort()终止任务（包括所有子任务）；
- 说   明：1、支持嵌套式的异步编程，例如
+         
+ 说   明：
+
+         1、支持嵌套式的异步编程，例如
            task.then(function(...) {
              task2.wait(...).then(function(...) {
                task3.then(...).fire(...);
