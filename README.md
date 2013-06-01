@@ -13,7 +13,7 @@ jsa
       4、通过task.loop(..., ..., ..., ...)添加异步循环行为；
       5、通过fire(...)执行任务；
       6、通过task.status可以查看任务的执行状态；
-      7、通过task.returnValue可以查看任务的最近的行为返回值；
+      7、通过task.returnValue可以查看任务执行过程中最近的返回值；
       8、通过task.exceptInfo可以查看任务failure时的异常原因；
       9、通过task.reset()可以重置任务；
      10、通过task.abort()终止任务（包括所有子任务）；
