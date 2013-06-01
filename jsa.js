@@ -296,6 +296,13 @@
             var argsCache = self.argsCache;
             self.observableList = []; // 清空子任务列表
             self.argsCache = []; // 清空子任务参数列表
+            var flag = false; // 若子任务的返回值全都无返回值，则采用args或returnValue代替
+            for (var i = 0, len = argsCache.length; i < len; ++i)
+              if (typeof argsCache[i] !== "undefined") {
+                flag = true;
+                break;
+              }
+            if (!flag) argsCache = args.length ? args : [self.returnValue];
             self.fire.apply(self, argsCache); // 重新执行此任务
           }
           break;
