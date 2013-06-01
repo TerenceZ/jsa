@@ -2,6 +2,7 @@
 * 库   名：jsa（暂定）
 * 作   者：钟华锋（TerenceZ）
 * 邮   箱：texvnars@gmail.com
+* 版  本：1.4.1
 * GitHub: https://github.com/TerenceZ/jsa.git
 * 用   途：用于javascript的异步编程，此库除了基本的异步编程功能外，还支持并行操
 *      作（伪）、嵌套式异步编程（大雾）等。
@@ -39,7 +40,7 @@
   var jsa = this.jsa = this.jsa || { // 命名空间jsa
     extend: function(source, target, override) { // 扩展函数
       for (var prop in source) {
-        if (override || !(prop in target))
+        if (!(prop in target) || override)
           target[prop] = source[prop];
       }
     },
@@ -60,39 +61,36 @@
     return {
       // 属性
       id: 0, // id计数器
-      idleTasks: new Object(), // 待执行的任务
-      completedTasks: [], // 已回收的任务列表
+      lives: 0, // 有效的任务数量
+      tasks: [], // 待执行的任务
+      completedTasks: [], // 完成执行的任务列表
       status: "idle", // 任务管理器状态
       context: null, // 当前正在执行的任务
       // 方法
       getId: function() { // 获取下一个有效的任务
-        if (this.id < 0) { // 对idPool初始化
+      	if (this.id < 0) { // 对idPool初始化
           throw "NoEnoughTaskId: No enough task id to allocate.";
         }
         return this.id++;
       },
-      unregister: function(taskId) { // 注销任务
-        if (typeof taskId !== "number")
-          throw "InvalidTaskId: Task id is invalid.";
-        var task = this.idleTasks[taskId];
-        if (task) {
-          if (!task.completed()) { // 若任务未完成，尝试终止
-            task.abort();
-          }
-          delete this.idleTasks[taskId]; // 删除任务
-          this.completedTasks.push(task);
-        }
+      clear: function() { // 注销任务
+        if (this.tasks.length == 0 || this.lives > 0 ||
+        	this.status !== "idle") return;
+        	this.id = 0;
+        this.completedTasks = this.completedTasks.concat(this.tasks);
+        this.tasks = [];
+        this.context = null;
       },
       register: function(task) { // 注册新任务
         var id = task.id;
-        if (!this.idleTasks[id])
-          this.idleTasks[id] = task;
-        else
-          throw "(╯‵□′)╯︵┻━Who stands on this position━┻ ---> this guy: " + this.idleTasks[id];
+        if (this.tasks[id])
+          throw "(╯‵□′)╯︵┻━Who stands on this position━┻ ---> this guy: " + this.tasks[id];
+        this.tasks[id] = task;
+        this.lives++;
       },
       get: function(id) {
         if (typeof id === "number")
-          return this.idleTasks[id];
+          return this.tasks[id];
         return null;
       },
       update: function(event) { // 状态更新函数
@@ -100,7 +98,7 @@
             id = event.id,
             self = this,
             context = self.context,
-            target = self.idleTasks[id];
+            target = self.tasks[id];
         switch(type) {
           case "focus": // 若有任务请求执行
             if (context && context.focused && context !== target) { // 已有任务正在执行，且target处于另一个任务（context）中
@@ -123,13 +121,13 @@
             }
             break;
           case "complete": // 有任务完成，执行清理
-            self.unregister(id);
+            if (--self.lives == 0)
+              self.clear();
             break;
         }
       }
     };
   }();
-  
   
   /***************************************************************
   ======================== 异步任务模块 =============================
@@ -139,7 +137,7 @@
   };
   
   jsa.extend({ // 扩展Task方法
-    status: ["idle", "hanging", "firing", "success", "failure"], // 任务状态列表
+    status: ["idle", "hanging", "firing", "failure", "success"], // 任务状态列表
     get: function(obj) {
       return (obj instanceof Task) ? obj : new Task();
     },
@@ -181,11 +179,9 @@
     },
     // 基本操作
     add: function(stat, fn) { // 添加任务处理动作
-      if (this.completed())
-        this.init();
+      if (this.completed()) this.init();
       var obj = jsa.clone(Task.basic); // 生成任务处理对象
-      if (typeof fn === "function") // 绑定动作
-        obj[stat] = fn;
+      if (typeof fn === "function") obj[stat] = fn;
       this.waitingList.push(obj);
       return this;
     },
@@ -199,8 +195,10 @@
     },
     wait: function(timeout) {
       var self = Task.get(this);
+      timeout = ~~timeout;
+      if (timeout <= 0) return self;
       if (self.completed()) self.init();
-      self.waitingList.push(~~timeout);
+      self.waitingList.push(timeout);
       return self;
     },
     abort: function() {
@@ -277,8 +275,7 @@
       return self;
     },
     completed: function() {
-      return (this.status === "success" || 
-              this.status === "failure");
+      return (this.status === "success" || this.status === "failure");
     },
     update: function(event) {
       var id = event.id,
@@ -382,15 +379,16 @@
     loop: function(env, fn) {
       var self = Task.get(this);
       if (self.completed()) return self;
-      var init, condition, increment, cond, inc;
+      var init, condition, increment, delta, cond, inc;
       if (typeof env === "number") {
         init = 0;
         condition = env;
         increment = 1;
       } else {
-        init      = env[0] || env.init || 0;
-        condition = env[1] || env.cond || 0;
-        increment = env[2] || env.inc  || 0;
+        init      = env[0] || env.init  || 0;
+        condition = env[1] || env.cond  || 0;
+        increment = env[2] || env.inc   || 0;
+        delta     = env[3] || env.delta || 0;
       }
       if (typeof condition === "number") {
         if (typeof increment === "number" && increment < 0) {
@@ -419,7 +417,7 @@
           if (cond(init)) {
             fn(init);
             init = inc(init);
-            task.then(arguments.callee);
+            task.wait(delta).then(arguments.callee);
           }
         }).fire();
       });
