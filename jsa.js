@@ -113,6 +113,8 @@
   
   var A_slice = Array.prototype.slice;
   
+  var debug = true;
+  
   /*********************************************************************************
    * singleton name: taskManager
    * description: use to manage tasks.
@@ -122,12 +124,10 @@
       // attributes
       id: 0,                  // id counter
       lives: 0,               // living tasks number
-      tasks: [],              // all tasks, including the tasks waiting to clear
-      completedTasks: [],     // tasks that have been cleared
+      tasks: new Object(),    // all living tasks
+      completedTasks: [],     // tasks that have been cleared, [just use to debug]
       status: "idle",         // the task manager status
       context: null,          // the task that is executing
-      defaultClearSize: 50,   // default clear size
-      clearSize: this.defaultClearSize,
       
       // method
       // to retrieve the available task id
@@ -137,45 +137,31 @@
         }
         return this.id++;
       },
-      // to sort tasks
-      sort: function() {
-        var t = this.tasks;
-        t.sort(function(e1, e2) { 
-          var s1 = e1.completed(), s2 = e2.completed();
-          if (s1) {
-            if (s2) return 0;
-            else return 1;
-          } else if (s2) {
-            return -1;
-          } else {
-            return 0;
-          }
-        });
-      },
       // to abort all tasks
       abort: function() {
-        this.sort();
-        for (var i = 0, len = this.lives; i < len; ++i, ++n) {
-          t[i].abort();
+        // this.sort();
+        var tasks = this.tasks;
+        for (var id in tasks) {
+          tasks[id].abort();
         }
-        this.clear();
       },
       // to clear tasks
       clear: function() {
         var lives = this.lives;
         if (lives == 0) {
           this.id = 0;
-          this.completedTasks = this.completedTasks.concat(this.tasks);
           this.tasks = [];
           this.status = "idle";
           this.context = null;
-          this.clearSize = this.defaultClearSize;
-        } else if (lives > this.clearSize) {
-          this.clearSize + this.defaultClearSize;
-        } else {
-          this.sort();
-          this.completedTasks = this.compeltedTasks.concat(this.tasks.slice(lives));
-          this.tasks = this.tasks.slice(0, lives);
+        }
+      },
+      // to unregister a task
+      unregister: function(task) {
+        var id = task.id;
+        if (this.tasks[id]) {
+          if (debug) this.completedTasks.push(task);
+          delete this.tasks[id];
+          this.lives--;
         }
       },
       // to register a new task
@@ -185,12 +171,6 @@
           throw "(╯‵□′)╯︵┻━Who stands on this position━┻ ---> this guy: " + this.tasks[id];
         this.tasks[id] = task;
         this.lives++;
-      },
-      // to get the task by id
-      get: function(id) {
-        if (typeof id === "number")
-          return this.tasks[id];
-        return null;
       },
       // to update the task manager's status
       update: function(event) {
@@ -224,8 +204,8 @@
             }
             break;
           case "complete": // there is a task is completed
-            if (--self.lives == 0 || self.tasks.length >= self.clearSize)
-              self.clear();
+            self.unregister(target);
+            if (this.lives == 0) this.clear();
             break;
         }
       }
@@ -273,7 +253,10 @@
       this.focused = false;     // use to indicate if the task is executing
       this.observer = null;     // the task's observer
       this.observableList = []; // the tasks that this task is observing
-      this.completedList = this.completedList ? this.completedList : [];
+      // for debug
+      if (debug) {
+        this.completedList = this.completedList ? this.completedList : [];
+      }
       try {
         taskManager.register(this); // try to register
       } catch(e) {
@@ -575,7 +558,7 @@
           result;
       self.focus(); // focus
       if (obj) { // if the object is available
-        self.completedList.push(obj);
+        if (debug) self.completedList.push(obj); // for debug
         if (typeof obj === "number") { // handle the timeout condition object
           self.blur();
           if (stat === "except") obj = 0;
