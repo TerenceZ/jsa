@@ -3,7 +3,6 @@
 * lib name: jsa (provisional)
 * author: Terence Zhong
 * email: texvnars@gmail.com
-* version: 1.5.0
 * GitHub: https://github.com/TerenceZ/jsa.git
 * Description: This is a simple library for javascript asynchronous programming.
 * 
@@ -83,8 +82,9 @@
 *        "hello hi"(delayed 500ms).
 *        If you click on the button again, you will just see the result is
 *        "hello"(delayed 500ms).
-*        If you use "task.abort()", you will just see "hello"(delayed 500ms),
-*        but if you use "jsa.taskManager.abort()", you will see nothing.
+*        If you use "task.abort()", you will just see "hello"(delayed 500ms), but 
+*        if you use "jsa.taskManager.abort()" after button clicked but before the
+*        result shows, you will see nothing (otherwise you can still see "hello").
 *        Why?  Because the handler is decorated as a task.
 * 
 *     3. This lib is open-source, so you can modify it as what you want. But you
@@ -292,15 +292,15 @@
       if (typeof obj === "function") {
         self.waitingList.push(Task.makeMonitored(obj));
       // the condtion is when the timeout is met
-      } else if (typeof obj === "number"){
+      } else if (typeof obj === "number") {
         var timeout = ~~obj;
         if (timeout <= 0) return self;
         if (self.completed()) self.init();
         self.waitingList.push(timeout);
       // the condition is when the dom's event is triggered, or
-      // when the event handler is accomplished
-      // note that the context of the listener will miss
-      } else if (obj.nodeType){
+      // when the event handler is accomplished.
+      // note that the context of the listener will miss [fix it]
+      } else if (obj.nodeType) {
         // make the fn agented by mfn and decorate it as a task
         var mfn = Task.makeMonitored(fn ? fn : function() { });
         self.waitingList.push(mfn);
@@ -324,7 +324,7 @@
         nobj = function() {
           var self = arguments.callee;
           var args = A_slice(arguments);
-          // decorate obj as a task
+          // decorate it as a task
           var task = Task.then(function() {
             return self.origin.apply(null, args);
           }).then(function(result) {
@@ -336,10 +336,10 @@
                 result: result
               });
             }
-            // because update the observers will maybe make the task hung,
-            // you should re-fire it
-            task.fire(result);
             self.observer = [];
+            // because update the observers will maybe make the task hung,
+            // it means that re-firing it is nessesary.
+            task.fire(result);
           }).fire();
         };
         // save the origin's info
@@ -413,7 +413,7 @@
         inc = increment;
       }
       return self.then(function() {
-        // decorate the fn as a task
+        // decorate the loop as a task
         var task = new Task();
         // this info used to indicate this task is for loop
         task.specific = "loop for task " + self.id;
@@ -426,7 +426,7 @@
         }).fire();
       });
     },
-    // private methods, please don't use them in plubic
+    // private methods, don't use them in plubic.
     // to hang the task up
     hang: function() {
       var f = this.focused; // save the focused status,
@@ -507,7 +507,7 @@
         case "normal": // the sub-task is completed normally
           // all sub-tasks are completed
           // if focused is true, it means that the firing action object in this task
-          // hasn't been accomplished, so maybe there is another sub-task that hasn't
+          // hasn't been accomplished, so maybe there are some sub-tasks that haven't
           // met, it means that just go on until the firing action object is accomplished
           if (!self.focused && list.length == self.argsCache.length) {
             var argsCache = self.argsCache;
@@ -519,7 +519,7 @@
                 flag = true;
                 break;
               }
-            // if true, let the args[ input args] or returnValue[latest return value]
+            // if true, let the args[latest input args] or returnValue[latest return value]
             // as the re-fire arguments
             if (!flag) argsCache = args ? args.length ? args : [self.returnValue] : argsCache;
             self.fire.apply(self, argsCache);  // re-fire the task
@@ -538,9 +538,9 @@
           // clear
           self.observableList = [];
           self.argsCache = [];
-          // if this function is call by the task itself
+          // if this function isn't call by the task itself
           if (id !== self.id) {
-            // re-fire it and propagate the except info until exception is handled
+            // re-fire it and propagate the except info forward to handle
             self.focus();
             self.status = "firing";
             self._fire("except", ["SubtaskException: subtask " + id + " has exception: " + args]);
@@ -568,11 +568,10 @@
         } else if (typeof obj === "function") { // handle the function agent[event listener] object
           if (obj.observer) { // the object is agented
             obj.observer.push(self);
-            // hang the task up without focused saving, because we don't need to bind the listener the context
-            // to any tasks
+            // hang the task up without saving "focused", because we don't need to bind the obj to any tasks
             self.blur();
             self.status = "hanging"; 
-            self.observableList.push(-1); // the listener object's id is -1, because the tasks' id would not use -1
+            self.observableList.push(-1); // the agent object's id is -1, because the tasks' id would not be set to -1
           } else { // otherwise, abort the task to avoid dead cycles
             self.abort("Cannot listen \"" + obj + "\", please make it monitored by calling jsa.Task.makeMonitored(fn) first");
           }
@@ -589,7 +588,7 @@
           if (result) args = [result]; // if the action has return value, make it as the next action's arguments
           if (self.argsCache.length !== self.observableList.length) { // if there are un-accomplished sub-tasks
             self.hang(); // hang the task up
-          } else if (self.argsCache.length > 0) { // there are sub-tasks and all of them are accomplished
+          } else if (self.argsCache.length > 0) { // if there are sub-tasks and all of them are accomplished
             self.timeoutId = setTimeout(function() { // update the task's status and continue to execute
               self.update({id: self.id, type: type, args: args});
             }, 0);
@@ -606,7 +605,7 @@
     }
   };
   
-  // make the Task is easier to use by making the followed methods as the Task's own method
+  // make the Task is easier to use by making the followed methods as the Task's own methods
   "once then loop wait makeMonitored".replace(/\S+/g, function(item) {
     Task[item] = Task.prototype[item];
   });
