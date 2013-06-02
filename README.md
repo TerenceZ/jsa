@@ -1,36 +1,90 @@
-jsa
-===
-    库   名：jsa（暂定）
-    作   者：钟华锋（TerenceZ）
-    邮   箱：texvnars@gmail.com
-    博   客：http://www.cnblogs.com/texvnars/archive/2013/05/31/3110583.html
+jsa (provisional)
+======================================
+    author: Terence Zhong
+    email: texvnars@gmail.com
+    GitHub: https://github.com/TerenceZ/jsa.git
+    Description: This is a simple library for javascript asynchronous programming.
+ 
+ Functionalities:
+--------------------------------------
+1. supports automatical callback after satisfying a specific condition.At present, this lib supports the following conditions:
+    1. when a timeout is met;
+    2. when a function is accomplished;
+    3. when an event is triggered;
+    4. when an event handler is accomplished;
+    5. when some parrallel sub-tasks are accomplished;
+2. supports chain operations, just like task.then(...).wait(...);
+3. supports async loop function;
+4. supports aborting a function;
+5. supports task manager;
+6. supports implicit task creation;
+7. supports arguments, result and exception propagation;
+8. so on;
+ 
+Usage:
+--------------------------------------
 
-    用   途：用于javascript的异步编程，此库除了基本的异步编程功能外，还支持并行操作（伪）、嵌套式异步编程（大雾）等。
-    用   法：
-      1、通过var task = [new] jsa.Task()创建任务，另外，直接使用jsa.Task.[then|once|wait|loop]会隐式创建任务；
-      2、通过task.then(function(...) {...})添加normal行为；
-      3、通过task.once(function(e) {...})添加异常处理（except）行为；
-      4、通过task.loop(..., ..., ..., ...)添加异步循环行为；
-      5、通过fire(...)执行任务；
-      6、通过task.status可以查看任务的执行状态；
-      7、通过task.returnValue可以查看任务执行过程中最近的返回值；
-      8、通过task.exceptInfo可以查看任务failure时的异常原因；
-      9、通过task.reset()可以重置任务；
-     10、通过task.abort()终止任务（包括所有子任务）；
-    说   明：
-      1、支持嵌套式的异步编程，例如
-        task.then(function(...) {
-          task2.wait(...).then(function(...) {
-            task3.then(...).fire(...);
-          }).fire(...);
-        }).fire(...);
-      2、支持并行操作，例如
-        task.then(function() {
-          task2.wait(1000).then(...).fire();
-            task3.then(...).once(...).wait(...).fire(...);
-        }.then(...).once(...).fire();
-      3、若子任务抛出异常（abort也会抛出异常），则会抛到上层任务，若上层没有once处理，则继续到上层，直至抛到window执
-        行环境下；
-      4、task.loop([init, condition, increment], fn)中的init、condition、increment可以为数字，而fn必须为函数对象,若第
-        一个参数不为数组而是数字，则代表循环次数；
-      5、当任务完成后继续then或once会自动重置任务；
+1. of course, you must include this lib;
+2. use "var task = [new] jsa.Task()" to create Task,
+   or just use "task = jsa.Task.[then|once|wait|loop]"
+   to create a implicit task;
+3. use "task.then(function(...) {...})" to add normal
+   action;
+4. use "task.once(function(...) {...})" to add exception
+   handler;
+5. use "task.loop(..., ...)" to add async loop action;
+6. use "task.wait(...[,...,...])" to add wait action;
+7. use "task.fire(...)" to start the task;
+8. use "task.abort(...)" to abort the task (including all sub-tasks);
+9. use "task.status" to check task running status;
+10. use "task.returnValue" to check return value;
+11. use "task.exceptInfo" to check exception info;
+12. use "task.reset()" to reset the task;
+13. use "jsa.taskManager.abort()" to abort all running tasks;
+14. use "jsa.taskManager" on console to check task manager status;
+ 
+Note:
+--------------------------------------
+
+1. You can easily to embrace some [parrallel] sub-tasks, just like this:
+```javascript
+        var task = jsa.Task.wait(500).then(function() {
+          jsa.Task.wait(500).then(function() {
+            console.log('a'); 
+          }).fire();
+          jsa.Task.then(function(s) {
+            jsa.Task.wait(300).then(function() {
+              console.log('b' + s);
+            }).fire();
+          }).fire(10);
+        }).then(function() {
+          console.log('c');
+        }).fire();
+```
+You can run it to check if the result is "b10 a c".
+If you want to abort this task, just use "task.abort()" or "jsa.taskManager.abort()" to abort all tasks.
+ 
+2. You can easily to listen the dom events and extend its handler, just like this:
+```javascript
+        var btn = document.createElement("input");
+        btn.type = "button";
+        btn.value = "Click me!";
+        document.body.appendChild(btn);
+        function go() {
+          jsa.Task.wait(500).then(function() {
+            console.log("hello");
+          }).fire();
+        }
+        var task = jsa.Task.wait(btn, "click", go).then(function() {
+          console.log("hi");
+        }).fire();
+```
+If you run it and click on the button, you can see the result is "hello hi"(delayed 500ms).
+If you click on the button again, you will just see the result is "hello"(delayed 500ms).
+If you use "task.abort()", you will just see "hello"(delayed 500ms), but if you use "jsa.taskManager.abort()", you will see nothing.
+Why?  Because the handler is decorated as a task.
+ 
+3. This lib is open-source, so you can modify it as what you want. But you should reserve the author messages 
+   of TerenceZ and this lib's copyright is reserved by TerenceZ.
+4. Hope you like it!
+ 
