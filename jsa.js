@@ -150,7 +150,6 @@
         var lives = this.lives;
         if (lives == 0) {
           this.id = 0;
-          this.tasks = [];
           this.status = "idle";
           this.context = null;
         }
