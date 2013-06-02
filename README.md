@@ -81,7 +81,8 @@ If you want to abort this task, just use "task.abort()" or "jsa.taskManager.abor
 ```
 If you run it and click on the button, you can see the result is "hello hi"(delayed 500ms).
 If you click on the button again, you will just see the result is "hello"(delayed 500ms).
-If you use "task.abort()", you will just see "hello"(delayed 500ms), but if you use "jsa.taskManager.abort()", you will see nothing.
+If you use "task.abort()", you will just see "hello"(delayed 500ms), but if you use "jsa.taskManager.abort()" after
+button clicked but before the result shows, you will see nothing (otherwise you can still see "hello").
 Why?  Because the handler is decorated as a task.
  
 3. This lib is open-source, so you can modify it as what you want. But you should reserve the author messages 
