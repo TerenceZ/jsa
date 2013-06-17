@@ -384,6 +384,7 @@
         init = 0;
         condition = env;
         increment = 1;
+        delta = 0;
       } else {
         init      = env[0] || env.init  || 0; // init value
         condition = env[1] || env.cond  || 0; // condition function or bound
