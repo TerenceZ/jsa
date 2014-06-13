@@ -323,7 +323,7 @@
         // agent mode
         nobj = function() {
           var self = arguments.callee;
-          var args = A_slice.call(arguments);
+          var args = arguments;
           // decorate it as a task
           var task = Task.then(function() {
             return self.origin.apply(null, args);
